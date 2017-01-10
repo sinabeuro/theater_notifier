@@ -6,9 +6,9 @@ from scrapy.spiders import CrawlSpider, Rule
 from scrapy.linkextractors import LinkExtractor
 import re
 from theaterCrawler.items import TheatercrawlerItem
-from cgv_spider_core import CgvSpiderCore
+from cgv_spider_core import TheaterSpiderCore
 
-class CgvSpider(CrawlSpider, CgvSpiderCore):
+class CgvSpider(CrawlSpider, TheaterSpiderCore):
     name = "cgv"
     allowed_domains = ["cgv.co.kr"]
     start_urls = (

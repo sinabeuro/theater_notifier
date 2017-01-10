@@ -6,15 +6,17 @@ from scrapy.spiders import Rule
 from scrapy.linkextractors import LinkExtractor
 import re
 from theaterCrawler.items import TheatercrawlerItem
-from cgv_spider_core import CgvSpiderCore
+from cgv_spider_core import TheaterSpiderCore
 
-class LocaltestCgvSpider(scrapy.Spider, CgvSpiderCore):
+class LocaltestCgvSpider(Spider, TheaterSpiderCore):
     name = "localtest"
     allowed_domains = ["cgv.co.kr"]
     start_urls = (
         'file:///home/pi/Documents/scrapy/theaterCrawler/iframeTheater.html',
     )
 
+    fake_url = 'http://www.cgv.co.kr/common/showtimes/iframeTheater.aspx?areacode=02&date=20170111&regioncode=07&screencodes=&screenratingcode=02&theatercode=0113'
     def parse(self, response):
-        response = response.replace(url='http://www.cgv.co.kr/common/showtimes/iframeTheater.aspx?areacode=02&date=20170106&regioncode=07&screencodes=&screenratingcode=02&theatercode=0113')
-        self.do_parse_item(response)
+        response = response.replace(url=self.fake_url)
+        for item in self.do_parse_item(response):
+            yield item
