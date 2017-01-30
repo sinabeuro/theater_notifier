@@ -5,82 +5,158 @@ from scrapy import Selector
 import datetime
 import re
 
-path_for_imax = '//div[@class="info-hall"]/ul/li[contains(./text(), "IMAX")]'
+class PageState(State):
 
-def get_value(url, key):
-    match = re.search(r'%s=(\d+)'%key, url)
-    return match.group(1)
+    not_impl_warning = "You must implement %s" % sys._getframe().f_code.co_name
+    path_for_imax = '//div[@class="info-hall"]/ul/li[contains(./text(), "IMAX")]'
+    __instances = {}
 
-def get_halls(response):
-    hxs = Selector(response=response)
-    halls = hxs.xpath(path_for_imax)
-    return halls
+    def __init__(self, name, **kwargs):
+        super(PageState, self).__init__(name, **kwargs)
+        self.add_callback('enter', 'top_half')
 
-def is_there_imax(response):
-    halls = get_halls(response)
-    return False if not halls else True
+    @classmethod
+    def get_value_from_url(cls, url, key):
+        match = re.search(r'%s=(\d+)'%key, url)
+        return match.group(1)
 
-def do_get_movies(response):
-        halls = get_halls(response)
-        movies = halls.xpath('../../../..//div[@class="info-movie"]//strong/text()').extract()
-        return movies
+    @classmethod
+    def get_halls(cls, response):
+        hxs = Selector(response=response)
+        halls = hxs.xpath(cls.path_for_imax)
+        return halls
+
+    @classmethod
+    def is_there_imax(cls, response):
+        halls = cls.get_halls(response)
+        return False if not halls else True
+
+    @classmethod
+    def do_get_movies(cls, response):
+            halls = cls.get_halls(response)
+            movies = []
+            for hall in halls:
+                movies.append(hall.xpath('../../../..//div[@class="info-movie"]//strong/text()').extract()[0].lstrip())
+            return movies
+
+    def __new__(cls, name=None, **kwargs):
+        if cls not in cls.__instances:
+            cls.__instances[cls] = super(PageState, cls).__new__(cls, name=None, **kwargs)
+        return cls.__instances[cls]
+ 
+    @classmethod
+    def is_this_state(cls, response):
+        raise NotImplementedError(cls.not_impl_warning)
+
+    @classmethod
+    def top_half(cls):
+        raise NotImplementedError(cls.not_impl_warning)
+
+    @classmethod
+    def bottom_half(cls):
+        raise NotImplementedError(cls.not_impl_warning)
+
+    @classmethod
+    def get_movies(cls):
+        raise NotImplementedError(cls.not_impl_warning)
 
 # Pay attention to the order of the class declaration    
-class Closing(State):
-    """description of class"""
+"""
+class Closing(PageState):
 
-    @staticmethod    
-    def is_this_state(response):
-        raw_date = get_value(response.url, 'date')
+    @classmethod
+    def is_this_state(cls, response):
+        raw_date = cls.get_value_from_url(response.url, 'date')
         date = datetime.datetime.strptime(raw_date, '%Y%m%d')
         now =  datetime.datetime.now()
         delta = now - date
         return True if delta.days > 0 else False
 
-    @staticmethod  
-    def get_movies(response):
+    @classmethod
+    def top_half(cls):
+        pass
+
+    @classmethod
+    def bottom_half(cls, coll, doc):
+        coll.remove(doc)
+    
+    @classmethod
+    def get_movies(cls, response):
         return ['']
+"""
+class Running(PageState):
 
-class Running(State):
-    """description of class"""
+    def __init__(self, name, **kwargs):
+        super(Running, self).__init__(name, **kwargs)
 
-    @staticmethod    
-    def is_this_state(response):
-        imax = is_there_imax(response)
+    @classmethod
+    def is_this_state(cls, response):
+        imax = cls.is_there_imax(response)
         return imax
 
-    @staticmethod  
-    def get_movies(response):
-        return do_get_movies(response)
+    @classmethod
+    def top_half(cls):
+        print 'top half'
 
-class Unopened(State):
+    @classmethod
+    def bottom_half(cls, coll, doc):
+        coll.replace_one(doc, doc, upsert=True)
+
+    @classmethod
+    def get_movies(cls, response):
+        return cls.do_get_movies(response)
+
+class Unopened(PageState):
     """description of class"""
 
-    @staticmethod
-    def is_this_state(response):
-        imax = is_there_imax(response)
+    @classmethod
+    def is_this_state(cls, response):
+        imax = cls.is_there_imax(response)
         return not imax
 
-    @staticmethod  
-    def get_movies(response):
+    @classmethod
+    def top_half(cls):
+        pass
+
+    @classmethod
+    def bottom_half(cls):
+        pass
+
+    @classmethod
+    def get_movies(cls, response):
         return ['']
 
-class Preparing(State):
-    """description of class"""
-    
-    @staticmethod
-    def is_this_state(response):
+class Preparing(PageState):
+
+    @classmethod
+    def is_this_state(cls, response):
         # Implementation is required
         return False
 
-    @staticmethod  
-    def get_movies(response):
-        return do_get_movies(response)
+    @classmethod
+    def top_half(cls):
+        pass
 
-class TheaterStateFactory(object):
-    
+    @classmethod
+    def bottom_half(cls):
+        pass
+
+    @classmethod
+    def get_movies(cls, response):
+        return cls.do_get_movies(response)
+
+class PageStateFactory(object):
+
     @staticmethod
-    def get_state_by_response(response):
-        for state in globals()['State'].__subclasses__():
+    def get_pagestate_by_name(name):
+        for state_cls in globals()['PageState'].__subclasses__():
+            state = state_cls(state_cls.__name__)
+            if state.__class__.__name__ == name:
+                return state
+
+    @staticmethod
+    def get_pagestate_by_rsp(response):
+        for state_cls in globals()['PageState'].__subclasses__():
+            state = state_cls(state_cls.__name__)
             if state.is_this_state(response):
                 return state

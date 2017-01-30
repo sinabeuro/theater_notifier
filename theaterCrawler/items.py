@@ -9,7 +9,4 @@ import scrapy
 
 
 class TheatercrawlerItem(scrapy.Item):
-    theatercode = scrapy.Field()
-    areacode = scrapy.Field()
-    date = scrapy.Field()
-    moviename = scrapy.Field()
+    page = scrapy.Field()

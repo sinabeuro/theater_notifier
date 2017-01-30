@@ -5,35 +5,28 @@ from scrapy.http import Request
 from scrapy.linkextractors import LinkExtractor
 import re
 from theaterCrawler.items import TheatercrawlerItem
-from theaterCrawler.spiders.states import TheaterStateFactory, Running, Closing, Preparing, Unopened
+from page import PageCache
 
 class TheaterSpiderCore(object):
     allowed_domains = ["cgv.co.kr"]
     path_for_imax = '//div[@class="info-hall"]/ul/li[contains(./text(), "IMAX")]'
-    
-    @classmethod
-    def get_value(cls, url, key):
+
+    def get_value(self, url, key):
         match = re.search(r'%s=(\d+)'%key, url)
         return match.group(1)
 
-    @classmethod
-    def is_there_imax(cls, response):
-        hxs = Selector(response=response)
-        halls = hxs.xpath(path_for_imax)
-        return False if not halls else True
-
-    def init_page_pool():
-        pass
+    def init_pagecache(self, coll):
+        pagecache = PageCache.get_instance(coll)
+        pagecache.add_batch_page()
 
     def do_parse_item(self, response):
-        state = TheaterStateFactory.get_state_by_response(response)
-        movies = state.get_movies(response)
+        theatercode = self.get_value(response.url, 'theatercode')
+        areacode = self.get_value(response.url, 'areacode')
+        date = self.get_value(response.url, 'date')
+        pagecache = PageCache.get_instance()
 
-        for moviename in movies:
-            item = TheatercrawlerItem()
-            item['theatercode'] = self.get_value(response.url, 'theatercode')
-            item['areacode'] = self.get_value(response.url, 'areacode')
-            item['date'] = self.get_value(response.url, 'date')
-            item['moviename'] = moviename.lstrip()
-            self.logger.info('%s', item['moviename'])
-            yield item
+        page = pagecache.get_page(dict(theatercode=theatercode, areacode=areacode, date=date))
+        page.update(response)
+        item = TheatercrawlerItem()
+        item['page'] = page
+        yield item
