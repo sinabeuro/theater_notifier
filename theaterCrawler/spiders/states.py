@@ -61,7 +61,7 @@ class PageState(State):
         raise NotImplementedError(cls.not_impl_warning)
 
 # Pay attention to the order of the class declaration    
-"""
+
 class Closing(PageState):
 
     @classmethod
@@ -83,7 +83,7 @@ class Closing(PageState):
     @classmethod
     def get_movies(cls, response):
         return ['']
-"""
+
 class Running(PageState):
 
     def __init__(self, name, **kwargs):
@@ -119,8 +119,8 @@ class Unopened(PageState):
         pass
 
     @classmethod
-    def bottom_half(cls):
-        pass
+    def bottom_half(cls, coll, doc):
+        coll.remove(doc)
 
     @classmethod
     def get_movies(cls, response):

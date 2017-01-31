@@ -11,6 +11,8 @@ from theaterCrawler.items import TheatercrawlerItem
 from cgv_spider_core import TheaterSpiderCore
 from scrapy.conf import settings
 import pymongo
+from scrapy import signals
+from scrapy.exceptions import DontCloseSpider
 
 class LocaltestCgvSpider(Spider, TheaterSpiderCore):
     name = "localtest"
@@ -19,7 +21,16 @@ class LocaltestCgvSpider(Spider, TheaterSpiderCore):
         'file:///home/pi/Documents/scrapy/theaterCrawler/iframeTheater.html',
     )
 
-    fake_url = 'http://www.cgv.co.kr/common/showtimes/iframeTheater.aspx?areacode=02&date=20170111&regioncode=07&screencodes=&screenratingcode=02&theatercode=0113'
+    fake_url = 'http://www.cgv.co.kr/common/showtimes/iframeTheater.aspx?areacode=02&date=20170202&regioncode=07&screencodes=&screenratingcode=02&theatercode=0113'
+    def spider_idle(self, spider):
+        spider.logger.info('Spider idle: %s', spider.name)
+        raise DontCloseSpider
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = super(LocaltestCgvSpider, cls).from_crawler(crawler, *args, **kwargs)
+        crawler.signals.connect(spider.spider_idle, signal=signals.spider_idle)
+        return spider
 
     def start_requests(self):
         connection = pymongo.MongoClient(
@@ -35,5 +46,6 @@ class LocaltestCgvSpider(Spider, TheaterSpiderCore):
 
     def parse(self, response):
         response = response.replace(url=self.fake_url)
+        print 'parse'
         for item in self.do_parse_item(response):
             yield item

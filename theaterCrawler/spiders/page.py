@@ -4,10 +4,10 @@ from theaterCrawler.spiders.states import PageStateFactory, Running, Preparing, 
 class Page(object):
     """description of class"""
     
-    def __init__(self, db_coll, doc=None):
+    def __init__(self, db_coll, doc=None, dirty=False):
         self.machine = Machine()
         self.db_coll = db_coll
-        self.dirty = False
+        self.dirty = dirty
         if doc: self.deserialize(doc)
 
     def __str__(self):
@@ -26,7 +26,7 @@ class Page(object):
         self.theatercode = doc.get('theatercode')
         self.areacode = doc.get('areacode')
         self.date = doc.get('date')
-        self.moviename = doc.get('moviename')
+        self.moviename = doc.get('moviename', [])
         state = PageStateFactory.get_pagestate_by_name(doc.get('state', 'Unopened'))
         self.machine.set_state(state)
 
@@ -43,19 +43,23 @@ class Page(object):
         next_state = PageStateFactory.get_pagestate_by_rsp(response)
         movies = next_state.get_movies(response)
 
+        print self.moviename
+        print movies
         # There is no need to update ..
-        if self.machine.state == next_state and self.movies == movies:
+        if self.machine.state == next_state and self.moviename == movies:
             return
 
         # top_half will be executed
         self.machine.set_state(next_state)
-        self.movies = movies
+        self.moviename = movies
         self.dirty = True
 
     def writeback(self):
-        doc = self.serialize()
-        state_obj = PageStateFactory.get_pagestate_by_name(self.machine.state)
-        state_obj.bottom_half(self.db_coll, doc)
+        if self.dirty:
+            doc = self.serialize()
+            state_obj = PageStateFactory.get_pagestate_by_name(self.machine.state)
+            state_obj.bottom_half(self.db_coll, doc)
+            self.dirty = False
 
 class PageCache(object):   
     """ Resource manager.
@@ -90,6 +94,9 @@ class PageCache(object):
         found = None
         for page in self.__pages:
             found = page if page.match(**arg) else None
+        if not found:
+            found = Page(self.__db_coll, arg, True)
+            self.__pages.append(found)
         return found
        
     def add_page(self, page):
