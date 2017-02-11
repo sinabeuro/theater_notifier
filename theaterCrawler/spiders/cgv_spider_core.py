@@ -26,7 +26,10 @@ class TheaterSpiderCore(object):
         pagecache = PageCache.get_instance()
 
         page = pagecache.get_page(dict(theatercode=theatercode, areacode=areacode, date=date))
-        page.update(response)
+        need_reschedule = page.update(response)
+        if need_reschedule :
+            yield Request(response.url, callback=self.parse_item, dont_filter=True)
+
         item = TheatercrawlerItem()
         item['page'] = page
         yield item

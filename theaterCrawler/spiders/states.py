@@ -5,7 +5,7 @@ from scrapy import Selector
 import datetime
 import re
 
-class PageState(State):
+class PageState(object):
 
     not_impl_warning = "You must implement %s" % sys._getframe().f_code.co_name
     path_for_imax = '//div[@class="info-hall"]/ul/li[contains(./text(), "IMAX")]'
@@ -13,7 +13,6 @@ class PageState(State):
 
     def __init__(self, name, **kwargs):
         super(PageState, self).__init__(name, **kwargs)
-        self.add_callback('enter', 'top_half')
 
     @classmethod
     def get_value_from_url(cls, url, key):
@@ -48,12 +47,13 @@ class PageState(State):
     def is_this_state(cls, response):
         raise NotImplementedError(cls.not_impl_warning)
 
+    # Must return whether this page is valid
     @classmethod
-    def top_half(cls):
+    def update(cls):
         raise NotImplementedError(cls.not_impl_warning)
 
     @classmethod
-    def bottom_half(cls):
+    def writeback(cls, coll, doc):
         raise NotImplementedError(cls.not_impl_warning)
 
     @classmethod
@@ -61,7 +61,6 @@ class PageState(State):
         raise NotImplementedError(cls.not_impl_warning)
 
 # Pay attention to the order of the class declaration    
-
 class Closing(PageState):
 
     @classmethod
@@ -73,16 +72,17 @@ class Closing(PageState):
         return True if delta.days > 0 else False
 
     @classmethod
-    def top_half(cls):
-        pass
+    def update(cls):
+        return False
 
     @classmethod
-    def bottom_half(cls, coll, doc):
-        coll.remove(doc)
-    
+    def writeback(cls, coll, doc):
+        key =  dict(theatercode=doc['theatercode'], areacode=doc['areacode'], date=doc['date'])
+        coll.remove(key)
+
     @classmethod
     def get_movies(cls, response):
-        return ['']
+        return []
 
 class Running(PageState):
 
@@ -95,12 +95,13 @@ class Running(PageState):
         return imax
 
     @classmethod
-    def top_half(cls):
-        print 'top half'
+    def update(cls):
+        return True
 
     @classmethod
-    def bottom_half(cls, coll, doc):
-        coll.replace_one(doc, doc, upsert=True)
+    def writeback(cls, coll, doc):
+        key = dict(theatercode=doc['theatercode'], areacode=doc['areacode'], date=doc['date'])
+        coll.replace_one(key, doc, upsert=True)
 
     @classmethod
     def get_movies(cls, response):
@@ -115,16 +116,17 @@ class Unopened(PageState):
         return not imax
 
     @classmethod
-    def top_half(cls):
-        pass
+    def update(cls):
+        return True
 
     @classmethod
-    def bottom_half(cls, coll, doc):
-        coll.remove(doc)
+    def writeback(cls, coll, doc):
+        key =  dict(theatercode=doc['theatercode'], areacode=doc['areacode'], date=doc['date'])
+        coll.remove(key)
 
     @classmethod
     def get_movies(cls, response):
-        return ['']
+        return []
 
 class Preparing(PageState):
 
@@ -134,11 +136,11 @@ class Preparing(PageState):
         return False
 
     @classmethod
-    def top_half(cls):
-        pass
+    def update(cls):
+        return True
 
     @classmethod
-    def bottom_half(cls):
+    def writeback(cls, coll, doc):
         pass
 
     @classmethod

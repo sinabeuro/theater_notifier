@@ -1,13 +1,16 @@
 from transitions import Machine
-from theaterCrawler.spiders.states import PageStateFactory, Running, Preparing, Unopened #,Closing
+from theaterCrawler.spiders.states import PageStateFactory, Running, Preparing, Unopened, Closing
+import errno
+from theaterCrawler.spiders.listener import Listener, Listenable
 
-class Page(object):
+class Page(Listenable):
     """description of class"""
     
     def __init__(self, db_coll, doc=None, dirty=False):
-        self.machine = Machine()
+        super(Page, self).__init__()
         self.db_coll = db_coll
         self.dirty = dirty
+        self.valid = True
         if doc: self.deserialize(doc)
 
     def __str__(self):
@@ -19,7 +22,8 @@ class Page(object):
         doc['areacode'] = self.areacode
         doc['date'] = self.date
         doc['moviename'] = self.moviename
-        doc['state'] = self.machine.state
+        doc['state'] = self.state.__class__.__name__
+        doc['url'] = self.url
         return doc
 
     def deserialize(self, doc):
@@ -27,11 +31,12 @@ class Page(object):
         self.areacode = doc.get('areacode')
         self.date = doc.get('date')
         self.moviename = doc.get('moviename', [])
+        self.url = doc.get('url')
         state = PageStateFactory.get_pagestate_by_name(doc.get('state', 'Unopened'))
-        self.machine.set_state(state)
+        self.set_state(state)
 
     def match(self, date, areacode, theatercode):
-        # need a logic that checks the parameters
+        # Need a logic that checks the parameters
         if self.theatercode == theatercode and \
         self.areacode == areacode and \
         self.date == date :
@@ -42,36 +47,50 @@ class Page(object):
     def update(self, response):
         next_state = PageStateFactory.get_pagestate_by_rsp(response)
         movies = next_state.get_movies(response)
+        need_reschedule = True
 
-        print self.moviename
-        print movies
         # There is no need to update ..
-        if self.machine.state == next_state and self.moviename == movies:
-            return
+        if self.state == next_state and \
+            self.moviename == movies:
+            print 'PASS'
+            self.dirty = False
+            return need_reschedule
+        
+        self.set_state(next_state)
+        print self.state.__class__.__name__
+        if not self.state.update():
+            self.notify_event()
+            need_reschedule = False
 
-        # top_half will be executed
-        self.machine.set_state(next_state)
+        self.url = response.url
         self.moviename = movies
         self.dirty = True
+        return need_reschedule
 
     def writeback(self):
+        print self.dirty
         if self.dirty:
             doc = self.serialize()
-            state_obj = PageStateFactory.get_pagestate_by_name(self.machine.state)
-            state_obj.bottom_half(self.db_coll, doc)
+            self.state.writeback(self.db_coll, doc)
             self.dirty = False
 
-class PageCache(object):   
-    """ Resource manager.
-    Handles checking out and returning resources from clients.
-    It's a singleton class.
-    """
+    def set_state(self, state):
+            self.state = state
+
+    def notify_event(self):
+        self.listener.on_event(self)
+
+    def add_event_listener(self, listener):
+        self.listener = listener
+
+class PageCache(Listener):
 
     __instance = None
     __pages = list()
     __db_coll = None
 
     def __init__(self, coll):
+        super(PageCache, self).__init__()
         self.__db_coll = coll
         self.add_batch_page()
         
@@ -93,10 +112,15 @@ class PageCache(object):
     def get_page(self, arg):
         found = None
         for page in self.__pages:
-            found = page if page.match(**arg) else None
+            if page.match(**arg) :
+                found = page
+                break
+
         if not found:
             found = Page(self.__db_coll, arg, True)
+            found.add_event_listener(self)
             self.__pages.append(found)
+
         return found
        
     def add_page(self, page):
@@ -105,4 +129,14 @@ class PageCache(object):
 
     def add_batch_page(self):
         for doc in self.__db_coll.find():
-            self.add_page(Page(self.__db_coll, doc))
+            page = Page(self.__db_coll, doc)
+            page.add_event_listener(self)
+            self.add_page(page)
+
+    def get_pages(self):
+        return self.__pages
+
+    def on_event(self, listenable):
+        if type(listenable) == Page:
+            page = listenable
+            self.__pages.remove(page)

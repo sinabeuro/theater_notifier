@@ -13,6 +13,7 @@ from scrapy.conf import settings
 import pymongo
 from scrapy import signals
 from scrapy.exceptions import DontCloseSpider
+from page import PageCache
 
 class LocaltestCgvSpider(Spider, TheaterSpiderCore):
     name = "localtest"
@@ -20,8 +21,11 @@ class LocaltestCgvSpider(Spider, TheaterSpiderCore):
     start_urls = (
         'file:///home/pi/Documents/scrapy/theaterCrawler/iframeTheater.html',
     )
+    custom_settings = {
+        "DOWNLOAD_DELAY": 3,
+    }
 
-    fake_url = 'http://www.cgv.co.kr/common/showtimes/iframeTheater.aspx?areacode=02&date=20170202&regioncode=07&screencodes=&screenratingcode=02&theatercode=0113'
+    fake_url = 'http://www.cgv.co.kr/common/showtimes/iframeTheater.aspx?areacode=02&date=20170209&regioncode=07&screencodes=&screenratingcode=02&theatercode=0113'
     def spider_idle(self, spider):
         spider.logger.info('Spider idle: %s', spider.name)
         raise DontCloseSpider
@@ -41,11 +45,20 @@ class LocaltestCgvSpider(Spider, TheaterSpiderCore):
         coll = db[settings['MONGODB_COLLECTION']]
 
         self.init_pagecache(coll)
+        pagecache = PageCache.get_instance(coll)
+        pages = pagecache.get_pages()
+
         for url in self.start_urls:
             yield self.make_requests_from_url(url)
 
+        for page in pages:
+            if page.url:
+                yield self.make_requests_from_url(page.url)
+
     def parse(self, response):
-        response = response.replace(url=self.fake_url)
-        print 'parse'
-        for item in self.do_parse_item(response):
-            yield item
+        if response.url in self.start_urls:
+            response = response.replace(url=self.fake_url)
+        print 'parse ::', response.url
+
+        for emissions in self.do_parse_item(response):
+            yield emissions

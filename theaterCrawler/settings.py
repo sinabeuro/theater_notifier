@@ -90,6 +90,7 @@ MONGODB_PORT = 27017
 MONGODB_DB = "theater"
 MONGODB_COLLECTION = "info"
 
+"""
 SPIDER_MIDDLEWARES = {}
 DOWNLOADER_MIDDLEWARES = {}
 
@@ -101,3 +102,4 @@ DOWNLOADER_MIDDLEWARES.update({
 })
 SCHEDULER = 'frontera.contrib.scrapy.schedulers.frontier.FronteraScheduler'
 FRONTERA_SETTINGS = 'theaterCrawler.frontera.settings'
+"""
